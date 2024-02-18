@@ -1,32 +1,80 @@
+#!/usr/bin/python3
+from fabric.api import *
+from datetime import datetime
+import os
+from os.path import exists
+
+
+"""Fabric script that generates a .tgz archive from
+the contents of the web_static folder"""
+
+
+def do_pack():
+    """Create a tar gzipped archive of the web_static folder"""
+    # Create the versions folder if it doesn't exist
+    if not os.path.exists("versions"):
+        local("mkdir -p versions")
+    # Generate the archive name based on the current date and time
+    now = datetime.now()
+    archive_name = "web_static_{}{}{}{}{}{}.tgz".format(now.year,
+                                                        now.month,
+                                                        now.day,
+                                                        now.hour,
+                                                        now.minute,
+                                                        now.second)
+    # Create the archive using the tar command
+    archive_path = "versions/{}".format(archive_name)
+    result = local("tar -cvzf {} web_static".format(archive_path))
+    # Return the archive path if successful, otherwise None
+    if result.succeeded:
+        return archive_path
+    else:
+        return None
+
+
+"""a Fabric script (based on the file 1-pack_web_static.py)
+that distributes an archive to your web servers"""
+
+
+env.hosts = ['54.87.212.72', '34.229.254.154']
+
+
 def do_deploy(archive_path):
-    """Distributes an archive to a web server.
-
-    Args:
-        archive_path (str): The path of the archive to distribute.
-    Returns:
-        If the file doesn't exist at archive_path or an error occurs - False.
-        Otherwise - True.
-    """
-    if not os.path.isfile(archive_path):
+    """Distributes an archive to the web servers"""
+    # Check if the archive path exists
+    if not exists(archive_path):
         return False
-
-    file = archive_path.split("/")[-1]
-    name = file.split(".")[0]
-
-    # Unpack and move the files to the appropriate directories
-    try:
-        put(archive_path, f"/tmp/{file}")
-        run(f"rm -rf /data/web_static/releases/{name}/")
-        run(f"mkdir -p /data/web_static/releases/{name}/")
-        run(f"tar -xzf /tmp/{file} -C /data/web_static/releases/{name}/")
-        run(f"rm /tmp/{file}")
-        run(f"mv /data/web_static/releases/{name}/web_static/* "
-            f"/data/web_static/releases/{name}/")
-        run(f"rm -rf /data/web_static/releases/{name}/web_static")
-        run(f"rm -rf /data/web_static/current")
-        run(f"ln -s /data/web_static/releases/{name}/ /data/web_static/current")
-    except Exception as e:
-        print(f"Error occurred during deployment: {e}")
-        return False
-
+    # Get the archive filename without extension
+    archive_file = archive_path.split('/')[-1]
+    archive_name = archive_file.split('.')[0]
+    # Define the remote paths
+    tmp_path = "/tmp/{}".format(archive_file)
+    release_path = "/data/web_static/releases/{}".format(archive_name)
+    current_path = "/data/web_static/current"
+    # Upload the archive to the /tmp/ directory of the web server
+    put(archive_path, tmp_path)
+    # Uncompress the archive to the /data/web_static/releases/
+    run("mkdir -p {}".format(release_path))
+    run("tar -xzf {} -C {}".format(tmp_path, release_path))
+    # Delete the archive from the web server
+    run("rm {}".format(tmp_path))
+    # Delete the symbolic link /data/web_static/current from the web server
+    run("mv {}/web_static/* {}".format(release_path, release_path))
+    # Delete the link /data/web_static/current from the web server
+    run("rm -rf {}/web_static".format(release_path))
+    # Delete the link /data/web_static/current from the web server
+    run("rm -rf {}".format(current_path))
+    # Create a new the symbolic link /data/web_static/current on the web server
+    run("ln -s {} {}".format(release_path, current_path))
     return True
+
+
+def deploy():
+    """creates and distributes to the web servers"""
+    # Call the do_pack() function and store the path of the created archive
+    archive_path = do_pack()
+    # Return False if no archive has been created
+    if archive_path is None:
+        return False
+    # Return the return value of do_deploy
+    return do_deploy(archive_path)
