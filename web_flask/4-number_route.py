@@ -37,7 +37,7 @@ def pythoniscool(text='is cool'):
 @app.route('/number/<int:n>', strict_slashes=False)
 def imanumber(n):
     """Returns 'n is a number' only if n is an integer."""
-    return "{d} is a number".format(n)
+    return "{} is a number".format(n)
 
 # Run the Flask application if this script is executed directly
 if __name__ == '__main__':
